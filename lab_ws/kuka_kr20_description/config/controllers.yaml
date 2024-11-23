@@ -1,0 +1,22 @@
+controller_manager_ns: controller_manager
+controller_list:
+  - name: kr20/kr20_joint_controller
+    action_ns: follow_joint_trajectory
+    type: FollowJointTrajectory
+    default: true
+    joints:
+      - base__link01
+      - link12__link01
+      - link01__link02
+      - link02__link03
+      - link03__link04
+      - link04__link05
+      - link05__gripper
+
+  - name: kr20/gripper_controller
+    action_ns: follow_joint_trajectory
+    type: FollowJointTrajectory
+    default: true
+    joints:
+      - gripper__gripper_left
+      - gripper__gripper_right

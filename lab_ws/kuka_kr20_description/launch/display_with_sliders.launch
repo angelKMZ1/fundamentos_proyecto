@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+
+  <param name="robot_description" command="$(find xacro)/xacro --inorder '$(find kuka_kr20_description)/urdf/kr20.xacro'" />
+
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
+
+  <node name="joint_state_publisher_gui" pkg="joint_state_publisher_gui" type="joint_state_publisher_gui" />
+
+  <node pkg="rviz" type="rviz" name="rviz" required="true"
+        args="-d $(find kuka_kr20_description)/rviz/kr20.rviz"/>
+          
+</launch>

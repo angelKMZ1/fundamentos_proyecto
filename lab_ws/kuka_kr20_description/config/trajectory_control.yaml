@@ -1,0 +1,31 @@
+kr20:
+  kr20_joint_controller:
+    type: "position_controllers/JointTrajectoryController"
+    joints:
+      - base__link01
+      - link12__link01
+      - link01__link02
+      - link02__link03
+      - link03__link04
+      - link04__link05
+      - link05__gripper
+
+    gains:
+      base__link01: {p: 30000, d: 900, i: 100, i_clamp: 0}
+      link12__link01:   {p: 30000, d: 900, i: 100, i_clamp: 0}
+      link01__link02:   {p: 24000, d: 800, i: 100, i_clamp: 0}
+      link02__link03:   {p: 20000, d: 700, i: 100, i_clamp: 0}
+      link03__link04:   {p: 18000, d: 700, i: 100, i_clamp: 0}
+      link04__link05:   {p: 18000, d: 700, i: 100, i_clamp: 0}
+      link05__gripper:   {p: 18000, d: 500, i: 100, i_clamp: 0}
+
+
+  gripper_controller:
+    type: "position_controllers/JointTrajectoryController"
+    joints:
+      - gripper__gripper_left
+      - gripper__gripper_right
+
+    gains:
+      gripper__gripper_left:  {p: 1000.0, d: 50, i: 10, i_clamp: 0.0}
+      gripper__gripper_right: {p: 1000.0, d: 50, i: 10, i_clamp: 0.0}
