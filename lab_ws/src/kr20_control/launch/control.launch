@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+      
+  <!-- Load controllers -->
+  <rosparam file="$(find kuka_kr20_description)/config/joints.yaml" command="load" />
+  <!-- Controllers -->
+  <node name="controller_spawner" pkg="controller_manager" type="spawner"
+        respawn="false" output="screen" ns="/kr20"
+        args="joint_state_controller
+              joint12_position_controller
+              joint1_position_controller
+              joint2_position_controller
+              joint3_position_controller
+              joint4_position_controller
+              joint5_position_controller
+              joint6_position_controller
+              gripper_left_position_controller
+              gripper_right_position_controller"/>
+
+        
+  <node name="rqt_publisher" pkg="rqt_publisher" type="rqt_publisher" />
+
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher"
+        respawn ="false" output="screen" >
+    <remap from="/joint_states" to="/kr20/joint_states" />
+  </node>
+
+  <!--node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" /-->
+
+  <node pkg="rviz" type="rviz" name="rviz" required="true"
+        args="-d $(find kuka_kr20_description)/rviz/kr20.rviz"/>
+          
+</launch>

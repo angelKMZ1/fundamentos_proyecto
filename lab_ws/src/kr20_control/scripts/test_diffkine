@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+
+import rospy
+from sensor_msgs.msg import JointState
+from markers import *
+from lab5functions import *
+
+if __name__ == '__main__':
+    # Initialize the node
+    rospy.init_node("testKineControlPosition")
+    print('starting motion ... ')
+    
+    # Publisher: publish to the joint_states topic
+    pub = rospy.Publisher('joint_states', JointState, queue_size=10)
+    
+    # Files for the logs
+    fxcurrent = open("/tmp/xcurrent.txt", "w")                    
+    fxdesired = open("/tmp/xdesired.txt", "w")
+    fq = open("/tmp/q.txt", "w")
+    
+    # Markers for the current and desired positions
+    bmarker_current = BallMarker(color['RED'])
+    bmarker_desired = BallMarker(color['GREEN'])
+    
+    # Joint names - actualizados según XACRO
+    # Joint names actualizados según el XACRO
+    jnames = ['link_00__link_01',        # Primera revoluta
+          'link_12__link_01',        # Segunda revoluta
+          'link_01__link_02',        # Tercera revoluta
+          'link_02__link_03',        # Cuarta revoluta
+          'link_03__link_04',        # Quinta revoluta
+          'link_04__link_05',        # Sexta revoluta
+          'link_05__gripper',        # Gripper (prismática)
+          'gripper__gripper_left',   # Gripper izquierdo
+          'gripper__gripper_right']  # Gripper derecho
+    
+    # Desired position
+    xd = np.array([1.2, 0.8, 2.2])
+    
+    # Initial configuration - 9 articulaciones
+    q0 = np.array([0.0, 0.0, -0.42, -0.32, 0.0, -1.65, 0.0, 0.0, 0.0])
+    
+    # Resulting initial position
+    T = fkine_kr20(q0)
+    x0 = T[0:3,3]
+    
+    # Markers
+    bmarker_current.xyz(x0)
+    bmarker_desired.xyz(xd)
+    
+    # Joint State message
+    jstate = JointState()
+    jstate.header.stamp = rospy.Time.now()
+    jstate.name = jnames
+    jstate.position = q0
+    
+    # Control parameters
+    freq = 200
+    dt = 1.0/freq
+    rate = rospy.Rate(freq)
+    
+    # Initial values
+    q = copy(q0)
+    x = copy(x0)
+    
+    # Main loop
+    while not rospy.is_shutdown():
+        # Current time
+        jstate.header.stamp = rospy.Time.now()
+        
+        # Control law
+        J = jacobian_position(q, delta=dt)
+        q = q - 0.5*dt*np.linalg.pinv(J) @ (x-xd)
+        
+        # Apply joint limits if needed
+        if q[0] > 1:
+            q[0] = 1
+            
+        # Forward kinematics
+        T = fkine_kr20(q)
+        x = T[0:3,3]
+        
+        # Print information
+        print("Configuracion actual:", q)
+        print("Posicion deseada:", xd)
+        print("Posicion actual:", x)
+        
+        # Logs
+        fxcurrent.write(str(x[0])+' '+str(x[1])+' '+str(x[2])+'\n')
+        fxdesired.write(str(xd[0])+' '+str(xd[1])+' '+str(xd[2])+'\n')
+        fq.write(' '.join(map(str, q)) + '\n')
+        
+        # Publish and update markers
+        jstate.position = q
+        pub.publish(jstate)
+        bmarker_desired.xyz(xd)
+        bmarker_current.xyz(x)
+        
+        rate.sleep()
+    
+    print('ending motion ...')
+    fxcurrent.close()
+    fxdesired.close()
+    fq.close()

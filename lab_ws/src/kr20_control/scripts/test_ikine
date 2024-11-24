@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+
+import rospy
+from sensor_msgs.msg import JointState
+from markers import *
+from lab5functions import *
+
+if __name__ == '__main__':
+    
+    rospy.init_node("testInvKine")
+    pub = rospy.Publisher('joint_states', JointState, queue_size=1)
+    
+    # Marcadores para las posiciones actual y deseada
+    bmarker      = BallMarker(color['RED'])
+    bmarker_des  = BallMarker(color['GREEN'])
+    
+    # Joint names (ya actualizados según el XACRO)
+    jnames = ['base__link01',
+             'link12__link01',
+             'link01__link02', 
+             'link02__link03', 
+             'link03__link04', 
+             'link04__link05', 
+             'link05__gripper',
+             'gripper__gripper_left',
+             'gripper__gripper_right']
+    
+    # Podemos probar diferentes posiciones deseadas
+    xd_list = [
+        np.array([0.84, 0.125, 0.249]),  # Posición original
+        np.array([0.5, 0.5, 0.5]),       # Punto en el espacio de trabajo
+        np.array([0.7, 0.0, 0.6])        # Otro punto
+    ]
+    
+    # Configuración inicial más cercana al home del robot
+    q0 = np.array([0.0, 0.0, -0.42, -0.32, 0.0, -1.65, 0.0, 0.0, 0.0])
+    
+    # Elegir una posición deseada
+    xd = xd_list[0]  # Usar la primera posición
+    
+    # Calcular la cinemática inversa
+    q = ikine(xd, q0)
+    
+    # Verificar el resultado
+    T = fkine_kr20(q)
+    print('Posición deseada:', xd)
+    print('Posición alcanzada:', T[0:3,3])
+    print('Error:', np.linalg.norm(xd - T[0:3,3]))
+    print('Configuración articular:', q)
+    
+    # Mostrar marcadores
+    bmarker.xyz(T[0:3,3])      # Rojo: posición alcanzada
+    bmarker_des.xyz(xd)        # Verde: posición deseada
+    
+    # Mensaje JointState
+    jstate = JointState()
+    jstate.header.stamp = rospy.Time.now()
+    jstate.name = jnames
+    jstate.position = q
+    
+    # Loop rate (in Hz)
+    rate = rospy.Rate(100)
+    
+    # Loop de ejecución
+    while not rospy.is_shutdown():
+        jstate.header.stamp = rospy.Time.now()
+        pub.publish(jstate)
+        bmarker.publish()
+        bmarker_des.publish()
+        rate.sleep()
