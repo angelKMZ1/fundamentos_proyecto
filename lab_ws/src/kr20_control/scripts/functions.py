@@ -21,7 +21,6 @@ def kr20_fkine(q):
     """
     Calcular la cinematica directa del robot KUKA KR20 dados sus valores articulares. 
     """
-     # Longitudes (en metros)
     L0 = 0.0
     L1 = 0.520
     L2 = 0.780
@@ -30,15 +29,16 @@ def kr20_fkine(q):
     L5 = 0
     L6 = 0.153
 
-    # Matrices DH (completar)
-    T0 = dh(L0, q[0],     0, 0) #
-    T1 = dh(L1, q[1],     0.160, pi/2) #
-    T2 = dh(0 , -q[2]+pi/2,      L2,0) #
-    T3 = dh(0 , q[3]+pi     ,-L3  ,-pi/2) #
+    # Matrices DH
+    T0 = dh(L0, q[0],     0, 0)
+    T1 = dh(L1, q[1],     0.160, pi/2)
+    T2 = dh(0 , -q[2]+pi/2,      L2,0)
+    T3 = dh(0 , q[3]+pi     ,-L3  ,-pi/2)
     T4 = dh(L4  , q[4]     ,0    ,pi/2)
     T5 = dh(0  , q[5]+pi     ,0    ,-pi/2)
-    T6 = dh(-L6-q[6]  ,  -pi/2    ,0   ,-pi/2)
+    T6 = dh(-L6  , 0   ,0   ,0)  # La pala en posición neutral
     
+    # Efector final con respecto a la base
     T = T0 @ T1 @ T2 @ T3 @ T4 @ T5 @ T6
     return T
 
