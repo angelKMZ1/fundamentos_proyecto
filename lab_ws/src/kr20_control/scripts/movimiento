@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+
+import rospy
+from sensor_msgs.msg import JointState
+from markers import *
+from lab5functions import *
+import time
+
+def move_to_target(q_current, xd, jstate, pub, bmarker_current, bmarker_desired, rate):
+    """
+    Función auxiliar para mover el robot a un punto objetivo
+    """
+    x_current = fkine_kr20(q_current[:7])[0:3,3]
+    error = np.linalg.norm(xd - x_current)
+    
+    while error > 0.01 and not rospy.is_shutdown():
+        # Current time
+        jstate.header.stamp = rospy.Time.now()
+        
+        # Get current position
+        T = fkine_kr20(q_current[:7])
+        x_current = T[0:3,3]
+        
+        # Control law
+        J = jacobian_position(q_current, delta=dt)
+        q_current = q_current - 0.8*dt*np.linalg.pinv(J) @ (x_current-xd)  # Aumenté la ganancia a 0.8
+        
+        # Forward kinematics
+        T = fkine_kr20(q_current[:7])
+        x_current = T[0:3,3]
+        
+        # Update error
+        error = np.linalg.norm(xd - x_current)
+        
+        # Print information
+        print("Error:", error)
+        print("Posición actual:", x_current)
+        print("Posición deseada:", xd)
+        
+        # Publish and update markers
+        jstate.position = q_current
+        pub.publish(jstate)
+        bmarker_desired.xyz(xd)
+        bmarker_current.xyz(x_current)
+        
+        rate.sleep()
+    
+    return q_current
+
+def push_movement(q_current, jstate, pub, rate):
+    """
+    Función para realizar el movimiento del empujador
+    """
+    print("\nEmpujando...")
+    # Avanzar el empujador
+    for i in range(100):  # Más iteraciones para movimiento más suave
+        q_current[7] = i * 0.25/100  # 0.25 es el límite máximo
+        jstate.position = q_current
+        pub.publish(jstate)
+        rate.sleep()
+    
+    time.sleep(1)  # Pausa en posición extendida
+    
+    print("\nRetrayendo...")
+    # Retraer el empujador
+    for i in range(100):
+        q_current[7] = 0.25 * (1 - i/100)
+        jstate.position = q_current
+        pub.publish(jstate)
+        rate.sleep()
+    
+    return q_current
+
+if __name__ == '__main__':
+    # Initialize the node
+    rospy.init_node("testKineControlPosition")
+    print('starting motion ... ')
+    
+    # Publisher: publish to the joint_states topic
+    pub = rospy.Publisher('joint_states', JointState, queue_size=10)
+    
+    # Markers for the current and desired positions
+    bmarker_current = BallMarker(color['RED'])
+    bmarker_desired = BallMarker(color['GREEN'])
+    
+    # Joint names actualizados
+    jnames = ['base__link01',
+             'link12__link01',
+             'link01__link02', 
+             'link02__link03', 
+             'link03__link04', 
+             'link04__link05',
+             'link05__shovel_base',
+             'shovel_base__pusher']
+    
+    # Solo dos puntos principales:
+    # Punto de recogida (bandeja de panes)
+    x_pickup = np.array([0.8, 0.3, 0.5])
+    
+    # Punto de entrega (donde se empujan los panes)
+    x_delivery = np.array([0.8, -0.3, 0.7])  # Cambiado el lado y un poco más alto
+    
+    # Configuración inicial
+    q0 = np.array([0.0, 0.0, 0, -0.32, 0.0, 0, 0.0, 0.0])
+    
+    # Joint State message
+    jstate = JointState()
+    jstate.header.stamp = rospy.Time.now()
+    jstate.name = jnames
+    jstate.position = q0
+    
+    # Control parameters
+    global dt
+    freq = 200
+    dt = 1.0/freq
+    rate = rospy.Rate(freq)
+    
+    # Current joint configuration
+    q = copy(q0)
+    
+    print("Iniciando secuencia de movimientos...")
+    
+    # 1. Ir a posición de recogida
+    print("\n1. Moviendo a posición de recogida de panes...")
+    q = move_to_target(q, x_pickup, jstate, pub, bmarker_current, bmarker_desired, rate)
+    print("En posición de recogida")
+    time.sleep(2)
+    
+    # 2. Ir a posición de entrega
+    print("\n2. Moviendo a posición de entrega...")
+    q = move_to_target(q, x_delivery, jstate, pub, bmarker_current, bmarker_desired, rate)
+    print("En posición de entrega")
+    time.sleep(1)
+    
+    # 3. Realizar movimiento de empuje
+    q = push_movement(q, jstate, pub, rate)
+    
+    # 4. Volver a posición de recogida
+    print("\n4. Volviendo a posición de recogida...")
+    q = move_to_target(q, x_pickup, jstate, pub, bmarker_current, bmarker_desired, rate)
+    print("¡Secuencia completada!")
+    
+    print('ending motion ...')

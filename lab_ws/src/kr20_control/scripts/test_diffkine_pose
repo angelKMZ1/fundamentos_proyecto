@@ -1,0 +1,154 @@
+#!/usr/bin/env python3
+
+import rospy
+import numpy as np
+from sensor_msgs.msg import JointState
+from markers import *
+from lab5functions import *
+from pyquaternion import Quaternion
+from copy import copy
+
+def clamp_joints(q, q_min, q_max):
+    """Restringe los valores articulares dentro de los límites permitidos."""
+    return np.clip(q, q_min, q_max)
+
+if __name__ == '__main__':
+    
+    # Initialize the node
+    rospy.init_node("testKineControlPose")
+    print('starting motion ... ')
+    
+    # Publisher: publish to the joint_states topic
+    pub = rospy.Publisher('joint_states', JointState, queue_size=1000)
+    
+    # Markers for the current and desired positions
+    bmarker_current = FrameMarker()
+    bmarker_desired = FrameMarker(0.5)
+    
+    # Joint names
+    jnames = ['base__link01', 
+             'link12__link01',
+             'link01__link02', 
+             'link02__link03', 
+             'link03__link04', 
+             'link04__link05',
+             'link05__shovel_base',
+             'shovel_base__pusher']
+    
+    # Desired pose - Rotación para mantener la pala horizontal
+    Rd = np.array([[0, -1, 0],
+                   [0, 0, -1],
+                   [1, 0, 0]])  # Matriz de rotación para mantener la pala horizontal
+    qd = Quaternion(matrix=Rd)
+    xd = np.array([0.8, 0.8, 1, qd.w, qd.x, qd.y, qd.z])
+    
+    # Initial configuration
+    q0 = np.array([0.0, 0.0, 0, 0, 0.0, 0, 0.0, 0.0])
+    
+    # Resulting initial pose
+    T = fkine_kr20(q0[:6])
+    x0 = TF2xyzquat(T)
+    
+    # Markers
+    bmarker_current.setPose(x0)
+    bmarker_desired.setPose(xd)
+    
+    # Joint State message
+    jstate = JointState()
+    jstate.header.stamp = rospy.Time.now()
+    jstate.name = jnames
+    jstate.position = q0
+    
+    # Control parameters
+    freq = 100  # Aumentado para mejor control
+    dt = 1.0/freq
+    rate = rospy.Rate(freq)
+    
+    # Initial values
+    q = copy(q0)
+    x = copy(x0)
+    
+    # Gains and limits - Ajustados para mejor control
+    k_pos = 1.0  # Ganancia para posición
+    k_ori = 0.8  # Ganancia para orientación
+    
+    # Límites articulares ajustados
+    q_min = np.array([-2.9, -2.0, -2.9, -2.9, -2.9, -2.9, -np.pi/2, 0])
+    q_max = np.array([2.9, 2.0, 2.9, 2.9, 2.9, 2.9, np.pi/2, 0.25])
+    
+    # Main loop
+    while not rospy.is_shutdown():
+        # Current time
+        jstate.header.stamp = rospy.Time.now()
+        
+        # Current configuration
+        T = fkine_kr20(q[:6])
+        x = TF2xyzquat(T)
+        
+        # Error entre poses
+        err_pose = PoseError(x, xd)
+        
+        # Separar errores de posición y orientación
+        err_pos = err_pose[0:3]
+        err_ori = err_pose[3:7]
+        
+        # Get Jacobian
+        J = jacobian_pose(q[:6])
+        
+        # Separar Jacobiano en posición y orientación
+        J_pos = J[0:3, :]
+        J_ori = J[3:7, :]
+        
+        try:
+            # Pseudoinversa amortiguada con factor adaptativo
+            error_total = np.linalg.norm(err_pos) + np.linalg.norm(err_ori)
+            lambda_ = 0.01 * (1 + np.exp(-error_total))  # Factor adaptativo
+            
+            # Combinar Jacobiano con pesos diferentes para posición y orientación
+            J_weighted = np.vstack([k_pos * J_pos, k_ori * J_ori])
+            J_pinv = J_weighted.T @ np.linalg.inv(J_weighted @ J_weighted.T + lambda_**2 * np.eye(7))
+            
+            # Control law con pesos diferentes
+            err_weighted = np.concatenate([k_pos * err_pos, k_ori * err_ori])
+            q_dot = -J_pinv @ err_weighted
+            
+        except np.linalg.LinAlgError:
+            print("Singularidad detectada - usando control más conservador")
+            # Control más conservador en caso de singularidad
+            lambda_ = 0.1
+            J_pinv = J.T @ np.linalg.inv(J @ J.T + lambda_**2 * np.eye(7))
+            q_dot = -0.5 * J_pinv @ err_pose
+        
+        # Update joint positions con límite de velocidad
+        max_velocity = 1.0  # rad/s
+        q_dot_norm = np.linalg.norm(q_dot)
+        if q_dot_norm > max_velocity:
+            q_dot = q_dot * max_velocity / q_dot_norm
+        
+        # Update joint positions (first 6 joints)
+        q[:6] = q[:6] + q_dot * dt
+        
+        # Apply joint limits
+        q = clamp_joints(q, q_min, q_max)
+        
+        # Verificar convergencia
+        if np.linalg.norm(err_pos) < 0.01 and np.linalg.norm(err_ori) < 0.1:
+            print("¡Objetivo alcanzado!")
+            break
+        
+        # Publish
+        jstate.position = q
+        pub.publish(jstate)
+        bmarker_desired.setPose(xd)
+        bmarker_current.setPose(x)
+        
+        # Print information
+        print("Error de posición:", np.linalg.norm(err_pos))
+        print("Error de orientación:", np.linalg.norm(err_ori))
+        print("Posición actual:", x[0:3])
+        print("Posición deseada:", xd[0:3])
+        
+        # Wait for next iteration
+        rate.sleep()
+    
+    print('ending motion ...')

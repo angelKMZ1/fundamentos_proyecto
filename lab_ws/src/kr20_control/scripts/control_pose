@@ -1,0 +1,244 @@
+#!/usr/bin/env python3
+
+import rospy
+import numpy as np
+from sensor_msgs.msg import JointState
+from copy import copy
+
+def dh(d, theta, a, alpha):
+    """
+    Matriz de transformación DH
+    """
+    sth = np.sin(theta)
+    cth = np.cos(theta)
+    sa  = np.sin(alpha)
+    ca  = np.cos(alpha)
+    T = np.array([[cth, -ca*sth,  sa*sth, a*cth],
+                  [sth,  ca*cth, -sa*cth, a*sth],
+                  [0.0,      sa,      ca,     d],
+                  [0.0,     0.0,     0.0,   1.0]])
+    return T
+
+def fkine_kr20(q):
+    """
+    Cinemática directa incluyendo la pala
+    q: vector de 7 articulaciones [q1,...,q6, q_pala]
+    """
+    # Longitudes
+    L0 = 0.0
+    L1 = 0.520
+    L2 = 0.780
+    L3 = 0.150
+    L4 = 0.86
+    L5 = 0
+    L6 = 0.153
+
+    # Matrices DH
+    T0 = dh(L0, q[0],     0, 0)
+    T1 = dh(L1, q[1],     0.160, np.pi/2)
+    T2 = dh(0 , -q[2]+np.pi/2,  L2, 0)
+    T3 = dh(0 , q[3]+np.pi,    -L3,  -np.pi/2)
+    T4 = dh(L4, q[4],     0,    np.pi/2)
+    T5 = dh(0 , q[5]+np.pi,     0,    -np.pi/2)
+    T6 = dh(-L6, q[6],    0,   0)  # Incluimos la articulación de la pala
+    
+    T = T0 @ T1 @ T2 @ T3 @ T4 @ T5 @ T6
+    return T
+
+def rot2eulZYX(R):
+    """
+    Convierte matriz de rotación a ángulos de Euler ZYX
+    """
+    if abs(R[2,0]) > 0.999999:
+        y = -np.pi/2 if R[2,0] > 0 else np.pi/2
+        z = 0
+        x = np.arctan2(-R[0,1], R[0,2])
+    else:
+        y = np.arctan2(-R[2,0], np.sqrt(R[2,1]**2 + R[2,2]**2))
+        z = np.arctan2(R[1,0], R[0,0])
+        x = np.arctan2(R[2,1], R[2,2])
+    return np.array([z, y, x])
+
+def jacobian_position(q, delta=0.0001):
+    """
+    Jacobiano de posición para 7 articulaciones
+    """
+    J = np.zeros((3,7))
+    T = fkine_kr20(q)
+    
+    for i in range(7):
+        dq = copy(q)
+        dq[i] = dq[i] + delta
+        dT = fkine_kr20(dq)
+        J[:,i] = (dT[0:3,3] - T[0:3,3])/delta
+    
+    return J
+
+def jacobian_orientation(q, delta=0.0001):
+    """
+    Jacobiano de orientación para 7 articulaciones
+    """
+    J = np.zeros((3,7))
+    T = fkine_kr20(q)
+    R = T[0:3,0:3]
+    
+    for i in range(7):
+        dq = copy(q)
+        dq[i] = dq[i] + delta
+        dT = fkine_kr20(dq)
+        dR = dT[0:3,0:3]
+        S = (dR @ R.T - np.eye(3))/delta
+        J[:,i] = np.array([S[2,1], S[0,2], S[1,0]])
+    
+    return J
+def get_desired_orientation(option=1):
+    """
+    Retorna diferentes matrices de rotación deseada
+    """
+    if option == 1:
+        # Pala horizontal mirando hacia adelante
+        return np.array([[1, 0, 0],
+                        [0, 1, 0],
+                        [0, 0, 1]])
+    elif option == 2:
+        # Pala horizontal rotada 90 grados
+        return np.array([[0, -1, 0],
+                        [1, 0, 0],
+                        [0, 0, 1]])
+    elif option == 3:
+        # Pala horizontal con rotación específica
+        return np.array([[0, 1, 0],
+                        [0, 0, 1],
+                        [1, 0, 0]])
+    elif option == 4:
+        # Pala horizontal ajustada para compensar inclinación
+        angle = np.pi/2
+        return np.array([[1, 0, 0],
+                        [0, np.cos(angle), -np.sin(angle)],
+                        [0, np.sin(angle), np.cos(angle)]])
+    else:
+        # Orientación personalizada
+        return np.array([[np.cos(np.pi/4), -np.sin(np.pi/4), 0],
+                        [np.sin(np.pi/4), np.cos(np.pi/4), 0],
+                        [0, 0, 1]])
+
+if __name__ == '__main__':
+    # Inicializar nodo
+    rospy.init_node("kr20_control")
+    print('Starting KR20 position and orientation control...')
+    
+    # Publisher
+    pub = rospy.Publisher('joint_states', JointState, queue_size=10)
+    
+    # Joint names
+    joint_names = ['base__link01', 
+                  'link12__link01',
+                  'link01__link02', 
+                  'link02__link03', 
+                  'link03__link04', 
+                  'link04__link05',
+                  'link05__shovel_base',
+                  'shovel_base__pusher']
+    
+    # Posición deseada
+    xd = np.array([0.6, 0.3, 2])
+    
+    # Orientación deseada (pala horizontal)
+    # Rotación para mantener la pala horizontal
+    # Seleccionar orientación deseada (probar diferentes valores)
+    orientation_option = 4  # Cambiar este valor para probar diferentes orientaciones
+    Rd = get_desired_orientation(orientation_option)
+    
+    # Configuración inicial (7 articulaciones + pusher)
+    q = np.array([0.0, 0.0, -0.42, -0.32, 0.0, -1.65, 0.0, 0.0])
+    
+    # Joint message
+    jstate = JointState()
+    jstate.name = joint_names
+    
+    # Control parameters
+    dt = 0.05
+    max_vel = 0.3  # Reducida para movimiento más suave
+    rate = rospy.Rate(1/dt)
+    
+    # Ganancias ajustadas para mejor control de orientación
+    k_pos = 0.3
+    k_ori = 0.5  # Aumentada para mejor control de orientación
+
+    
+    
+    print("Starting control loop...")
+    while not rospy.is_shutdown():
+        # Current time
+        jstate.header.stamp = rospy.Time.now()
+        
+        # Forward kinematics
+        T = fkine_kr20(q[:7])  # Usar 7 articulaciones
+        x = T[0:3,3]
+        R = T[0:3,0:3]
+        
+        # Errores
+        e_pos = xd - x
+        
+        # Error de orientación usando la fórmula de ángulo-eje
+        Re = Rd @ R.T
+        e_ori = np.array([Re[2,1] - Re[1,2],
+                         Re[0,2] - Re[2,0],
+                         Re[1,0] - Re[0,1]]) * 0.5
+        
+        # Verificar convergencia
+        error_pos = np.linalg.norm(e_pos)
+        error_ori = np.linalg.norm(e_ori)
+        
+        if error_pos < 0.01 and error_ori < 0.01:
+            print("Goal reached!")
+            break
+        
+        # Calcular Jacobianos
+        J_pos = jacobian_position(q[:7])
+        J_ori = jacobian_orientation(q[:7])
+        
+        # Combinar Jacobianos
+        J = np.vstack((J_pos, J_ori))
+        
+        # Error combinado
+        e = np.hstack((e_pos, e_ori))
+        
+        try:
+            # Control law con pseudoinversa amortiguada
+            lambda_ = 0.1
+            J_inv = J.T @ np.linalg.inv(J @ J.T + lambda_**2 * np.eye(6))
+            v = np.hstack((k_pos * e_pos, k_ori * e_ori))
+            dq = J_inv @ v
+            
+            # Limitar velocidad
+            max_vel = 0.5
+            if np.linalg.norm(dq) > max_vel:
+                dq = max_vel * dq/np.linalg.norm(dq)
+            
+            # Actualizar joints
+            q[:7] = q[:7] + dt * dq
+            
+            # Límites para la pala
+            q[6] = np.clip(q[6], -90*np.pi/180, 90*np.pi/180)
+            
+        except np.linalg.LinAlgError:
+            print("Singular configuration detected!")
+            continue
+        
+        # Publicar mensaje
+        jstate.position = q.tolist()
+        pub.publish(jstate)
+        
+        # Debug info mejorado
+        print(f"Position error: {error_pos:.4f}")
+        print(f"Orientation error: {error_ori:.4f}")
+        print(f"Current position: {x}")
+        print(f"Target position: {xd}")
+        print("Pala angle:", q[6])
+        # Mostrar matriz de rotación actual
+        euler_angles = rot2eulZYX(R)
+        print("Current orientation (euler):", euler_angles * 180/np.pi)
+        rate.sleep()
+    
+    print("Control finished")

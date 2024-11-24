@@ -1,0 +1,218 @@
+#!/usr/bin/env python3
+
+import rospy
+import numpy as np
+from sensor_msgs.msg import JointState
+from copy import copy
+import time
+
+def dh(d, theta, a, alpha):
+    """Matriz de transformación DH"""
+    sth = np.sin(theta)
+    cth = np.cos(theta)
+    sa  = np.sin(alpha)
+    ca  = np.cos(alpha)
+    T = np.array([[cth, -ca*sth,  sa*sth, a*cth],
+                  [sth,  ca*cth, -sa*cth, a*sth],
+                  [0.0,      sa,      ca,     d],
+                  [0.0,     0.0,     0.0,   1.0]])
+    return T
+
+def fkine_kr20(q):
+    """Cinemática directa incluyendo la pala"""
+    # Longitudes
+    L0 = 0.0
+    L1 = 0.520
+    L2 = 0.780
+    L3 = 0.150
+    L4 = 0.86
+    L5 = 0
+    L6 = 0.153
+
+    # Matrices DH
+    T0 = dh(L0, q[0],     0, 0)
+    T1 = dh(L1, q[1],     0.160, np.pi/2)
+    T2 = dh(0 , -q[2]+np.pi/2,  L2, 0)
+    T3 = dh(0 , q[3]+np.pi,    -L3,  -np.pi/2)
+    T4 = dh(L4, q[4],     0,    np.pi/2)
+    T5 = dh(0 , q[5]+np.pi,     0,    -np.pi/2)
+    T6 = dh(-L6, q[6],    0,   0)
+    
+    T = T0 @ T1 @ T2 @ T3 @ T4 @ T5 @ T6
+    return T
+
+def jacobian_position(q, delta=0.0001):
+    """Jacobiano de posición para 7 articulaciones"""
+    J = np.zeros((3,7))
+    T = fkine_kr20(q)
+    
+    for i in range(7):
+        dq = copy(q)
+        dq[i] = dq[i] + delta
+        dT = fkine_kr20(dq)
+        J[:,i] = (dT[0:3,3] - T[0:3,3])/delta
+    
+    return J
+
+def jacobian_orientation(q, delta=0.0001):
+    """Jacobiano de orientación para 7 articulaciones"""
+    J = np.zeros((3,7))
+    T = fkine_kr20(q)
+    R = T[0:3,0:3]
+    
+    for i in range(7):
+        dq = copy(q)
+        dq[i] = dq[i] + delta
+        dT = fkine_kr20(dq)
+        dR = dT[0:3,0:3]
+        S = (dR @ R.T - np.eye(3))/delta
+        J[:,i] = np.array([S[2,1], S[0,2], S[1,0]])
+    
+    return J
+
+def move_to_target(q_current, xd, Rd, joint_pub, joint_msg, dt=0.05, k_pos=0.3, k_ori=0.5):
+    """Mover el robot a una posición y orientación objetivo"""
+    rate = rospy.Rate(1/dt)
+    
+    while not rospy.is_shutdown():
+        # Tiempo actual
+        joint_msg.header.stamp = rospy.Time.now()
+        
+        # Forward kinematics
+        T = fkine_kr20(q_current[:7])
+        x = T[0:3,3]
+        R = T[0:3,0:3]
+        
+        # Errores
+        e_pos = xd - x
+        Re = Rd @ R.T
+        e_ori = np.array([Re[2,1] - Re[1,2],
+                         Re[0,2] - Re[2,0],
+                         Re[1,0] - Re[0,1]]) * 0.5
+        
+        # Verificar convergencia
+        error_pos = np.linalg.norm(e_pos)
+        error_ori = np.linalg.norm(e_ori)
+        
+        if error_pos < 0.01 and error_ori < 0.01:
+            print("Position reached!")
+            break
+        
+        # Calcular Jacobianos
+        J_pos = jacobian_position(q_current[:7])
+        J_ori = jacobian_orientation(q_current[:7])
+        
+        # Combinar Jacobianos
+        J = np.vstack((J_pos, J_ori))
+        
+        # Error combinado
+        e = np.hstack((e_pos, e_ori))
+        
+        try:
+            # Control law
+            lambda_ = 0.1
+            J_inv = J.T @ np.linalg.inv(J @ J.T + lambda_**2 * np.eye(6))
+            v = np.hstack((k_pos * e_pos, k_ori * e_ori))
+            dq = J_inv @ v
+            
+            # Limitar velocidad
+            max_vel = 0.3
+            if np.linalg.norm(dq) > max_vel:
+                dq = max_vel * dq/np.linalg.norm(dq)
+            
+            # Actualizar joints
+            q_current[:7] = q_current[:7] + dt * dq
+            q_current[6] = np.clip(q_current[6], -np.pi/2, np.pi/2)
+            
+        except np.linalg.LinAlgError:
+            print("Singular configuration!")
+            continue
+        
+        # Publicar mensaje
+        joint_msg.position = q_current.tolist()
+        joint_pub.publish(joint_msg)
+        
+        print(f"Position error: {error_pos:.4f}")
+        print(f"Orientation error: {error_ori:.4f}")
+        
+        rate.sleep()
+    
+    return q_current
+
+def push_sequence(q, joint_pub, joint_msg, push_time=2.0):
+    """Ejecutar secuencia de empuje"""
+    rate = rospy.Rate(50)
+    
+    # Extender el empujador
+    print("Extending pusher...")
+    steps = 50
+    for i in range(steps):
+        q[7] = i * 0.25/steps  # Mover hasta 0.25
+        joint_msg.position = q.tolist()
+        joint_pub.publish(joint_msg)
+        rate.sleep()
+    
+    # Mantener posición
+    time.sleep(push_time)
+    
+    # Retraer el empujador
+    print("Retracting pusher...")
+    for i in range(steps):
+        q[7] = 0.25 * (1 - i/steps)  # Volver a 0
+        joint_msg.position = q.tolist()
+        joint_pub.publish(joint_msg)
+        rate.sleep()
+    
+    return q
+
+if __name__ == '__main__':
+    # Inicializar nodo
+    rospy.init_node("kr20_sequence")
+    print('Starting KR20 movement sequence...')
+    
+    # Publisher
+    joint_pub = rospy.Publisher('joint_states', JointState, queue_size=10)
+    
+    # Joint names
+    joint_names = ['base__link01', 
+                  'link12__link01',
+                  'link01__link02', 
+                  'link02__link03', 
+                  'link03__link04', 
+                  'link04__link05',
+                  'link05__shovel_base',
+                  'shovel_base__pusher']
+    
+    # Orientación deseada (mantener pala horizontal)
+    angle = np.pi/2
+    Rd = np.array([[1, 0, 0],
+                   [0, np.cos(angle), -np.sin(angle)],
+                   [0, np.sin(angle), np.cos(angle)]])
+    
+    # Configuración inicial
+    q = np.array([0.0, 0.0, -0.42, -0.32, 0.0, -1.65, 0.0, 0.0])
+    
+    # Joint message
+    joint_msg = JointState()
+    joint_msg.name = joint_names
+    
+    # Secuencia de puntos
+    points = [
+        np.array([0.6, 0.6, 0.5]),  # Posición inicial
+        np.array([0.6, 0.3, 0.5]),  # Mover a la izquierda
+        np.array([0.6, 0.3, 2.0]),  # Subir
+        np.array([0.6, 0.6, 2.0])   # Mover a la derecha
+    ]
+    
+    print("\nStarting movement sequence...")
+    
+    # Ejecutar secuencia de movimientos
+    for i, point in enumerate(points):
+        print(f"\nMoving to point {i+1}: {point}")
+        q = move_to_target(q, point, Rd, joint_pub, joint_msg)
+        time.sleep(0.5)  # Pequeña pausa entre movimientos
+    
+    print("\nExecuting push sequence...")
+    q = push_sequence(q, joint_pub, joint_msg)
+    
+    print("\nSequence completed!")
