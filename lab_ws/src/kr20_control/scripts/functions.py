@@ -37,7 +37,7 @@ def kr20_fkine(q):
     T3 = dh(0 , q[3]+pi     ,-L3  ,-pi/2) #
     T4 = dh(L4  , q[4]     ,0    ,pi/2)
     T5 = dh(0  , q[5]+pi     ,0    ,-pi/2)
-    T6 = dh(-L6+q[6]  ,  -pi/2    ,0   ,-pi/2)
+    T6 = dh(-L6-q[6]  ,  -pi/2    ,0   ,-pi/2)
     
     T = T0 @ T1 @ T2 @ T3 @ T4 @ T5 @ T6
     return T
