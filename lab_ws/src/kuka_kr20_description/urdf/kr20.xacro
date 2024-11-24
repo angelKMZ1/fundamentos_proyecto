@@ -176,53 +176,111 @@
               meshscale="0.001 0.001 0.001" />
               
   <!-- GRIPPER START HERE -->
+<!-- Base de la pala usando geometría básica -->
+  <link name="shovel_base">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.05" length="0.1"/>
+      </geometry>
+      <material name="Grey">
+        <color rgba="0.7 0.7 0.7 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.05" length="0.1"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.5"/>
+      <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
+    </inertial>
+  </link>
 
-  <xacro:m_joint name="${link_05_name}__${gripper_name}" type="prismatic"
-           axis_xyz="1 0 0"
-           origin_rpy="0 0 0" origin_xyz="0.115 0 0"
-           parent="${link_05_name}" child="${gripper_name}"
-           limit_e="1000" limit_l="-0.1" limit_u="0.1" limit_v="0.5" />
+  <joint name="link05__shovel_base" type="revolute"
+         axis_xyz="0 1 0">
+    <parent link="link05"/>
+    <child link="shovel_base"/>
+    <origin xyz="0.115 0 0" rpy="0 0 0"/>
+    <limit effort="1000" lower="-3.14" upper="3.14" velocity="0.5"/>
+  </joint>
 
-  <xacro:m_link_mesh name="${gripper_name}" color="Black"
-              origin_rpy="0 0 0" origin_xyz="0 0 0"
-              mass="1"
-              ixx="1" ixy="0" ixz="0"
-              iyy="1" iyz="0"
-              izz="1"
-              meshfile="package://kuka_kr20_description/meshes/gripper_base01.stl"
-              meshscale="0.001 0.001 0.001" />
+  <!-- Pala -->
+  <link name="shovel_plate">
+    <visual>
+      <origin xyz="0.15 0 0" rpy="0 0.2 0"/>
+      <geometry>
+        <box size="0.3 0.2 0.02"/>
+      </geometry>
+      <material name="Grey">
+        <color rgba="0.7 0.7 0.7 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.15 0 0" rpy="0 0.2 0"/>
+      <geometry>
+        <box size="0.3 0.2 0.02"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.2"/>
+      <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
+    </inertial>
+  </link>
 
-  <xacro:m_joint name="${gripper_name}__gripper_left" type="prismatic"
-           axis_xyz="1 0 0"
-           origin_rpy="1.5708 0 1.5708" origin_xyz="0.04 0.00 0.000"
-           parent="${gripper_name}" child="gripper_left"
-           limit_e="1000" limit_l="-0.09" limit_u="0.00" limit_v="0.5" />
+  <joint name="shovel_base__shovel_plate" type="fixed">
+    <parent link="shovel_base"/>
+    <child link="shovel_plate"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
 
-  <xacro:m_link_mesh name="gripper_left" color="Grey"
-              origin_rpy="0 0 0" origin_xyz="0 0 0"
-              mass="0.1"
-              ixx="1" ixy="0" ixz="0"
-              iyy="1" iyz="0"
-              izz="1"
-              meshfile="package://kuka_kr20_description/meshes/gripper_left.stl"
-              meshscale="0.001 0.001 0.001" />
+  <!-- Empujador -->
+  <link name="pusher">
+    <visual>
+      <origin xyz="-0.1 0 0.05" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.02 0.18 0.1"/>
+      </geometry>
+      <material name="Black">
+        <color rgba="0.0 0.0 0.0 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.02 0.18 0.1"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.1"/>
+      <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
+    </inertial>
+  </link>
 
-  <xacro:m_joint name="${gripper_name}__gripper_right" type="prismatic"
-           axis_xyz="1 0 0"
-           origin_rpy="1.5708 0 1.5708" origin_xyz="0.04 0.00 0.000"
-           parent="${gripper_name}" child="gripper_right"
-           limit_e="1000" limit_l="0.00" limit_u="0.09" limit_v="0.5" />
-
-  <xacro:m_link_mesh name="gripper_right" color="Grey"
-              origin_rpy="0 0 0" origin_xyz="0 0 0"
-              mass="0.1"
-              ixx="1" ixy="0" ixz="0"
-              iyy="1" iyz="0"
-              izz="1"
-              meshfile="package://kuka_kr20_description/meshes/gripper_right.stl"
-              meshscale="0.001 0.001 0.001" />
+  <joint name="shovel_base__pusher" type="prismatic"
+         axis_xyz="1 0 0">
+    <parent link="shovel_base"/>
+    <child link="pusher"/>
+    <origin xyz="0.15 0 0" rpy="0 0 0"/>
+    <limit effort="1000" lower="0" upper="0.25" velocity="0.5"/>
+  </joint>
 
   <!-- GRIPPER END HERE -->
+
+  <!-- Gazebo colors -->
+  <gazebo reference="shovel_base">
+    <material>Gazebo/Grey</material>
+  </gazebo>
+
+  <gazebo reference="shovel_plate">
+    <material>Gazebo/Grey</material>
+  </gazebo>
+
+  <gazebo reference="pusher">
+    <material>Gazebo/Black</material>
+  </gazebo>
 
   <!-- END - Robot description -->
   
@@ -230,6 +288,14 @@
     <plugin name="gazebo_ros_control" filename="libgazebo_ros_control.so">
       <robotSimType>gazebo_ros_control/DefaultRobotHWSim</robotSimType>
       <robotNamespace>/kr20</robotNamespace>
+      <legacyModeNS>true</legacyModeNS>
+    </plugin>
+  </gazebo>
+
+  <gazebo>
+    <plugin name="gazebo_ros_control" filename="libgazebo_ros_control.so">
+      <robotNamespace>/kr20</robotNamespace>
+      <robotSimType>gazebo_ros_control/DefaultRobotHWSim</robotSimType>
       <legacyModeNS>true</legacyModeNS>
     </plugin>
   </gazebo>
