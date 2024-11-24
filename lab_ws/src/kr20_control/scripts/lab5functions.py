@@ -21,12 +21,12 @@ def dh(d, theta, a, alpha):
                   [0.0,     0.0,     0.0,   1.0]])
     return T
 
-
+"""
 def fkine_kr20(q):
-    """
+    
     Calcular la cinematica directa del robot KUKA KR20 dados sus valores articulares. 
     q es un vector numpy de la forma [q0, q1, q2, q3, q4, q5, q6]
-    """
+    
 
     # Longitudes (en metros)
     L0 = 0.0
@@ -48,24 +48,51 @@ def fkine_kr20(q):
     # Efector final con respecto a la base
     T = T0 @ T1 @ T2 @ T3 @ T4 @ T5 @ T6  
     return T
+"""
+def fkine_kr20(q):
+    """
+    Calcular la cinematica directa del robot KUKA KR20 dados sus valores articulares. 
+    q es un vector numpy de las primeras 6 articulaciones
+    """
+    # Longitudes (en metros)
+    L0 = 0.0
+    L1 = 0.520
+    L2 = 0.780
+    L3 = 0.150
+    L4 = 0.86
+    L5 = 0
+    L6 = 0.153
+
+    # Matrices DH
+    T0 = dh(L0, q[0],     0, 0)
+    T1 = dh(L1, q[1],     0.160, pi/2)
+    T2 = dh(0 , -q[2]+pi/2,      L2,0)
+    T3 = dh(0 , q[3]+pi     ,-L3  ,-pi/2)
+    T4 = dh(L4  , q[4]     ,0    ,pi/2)
+    T5 = dh(0  , q[5]+pi     ,0    ,-pi/2)
+    T6 = dh(-L6  , 0   ,0   ,0)  # La pala en posición neutral
+    
+    # Efector final con respecto a la base
+    T = T0 @ T1 @ T2 @ T3 @ T4 @ T5 @ T6
+    return T
 
 def jacobian_position(q, delta=0.0001):
     """
-    Jacobiano analítico para la posición. Retorna una matriz de 3x9
+    Jacobiano analítico para la posición. Retorna una matriz de 3x8
     """
     # Alocación de memoria
-    J = np.zeros((3,9))
+    J = np.zeros((3,8))
     # Transformación homogénea inicial
-    T = fkine_kr20(q)
+    T = fkine_kr20(q[:7])
     
     # Iteración para cada articulación
-    for i in range(9):
+    for i in range(8):
         # Copia de configuración articular
         dq = copy(q)
         # Incremento en la articulación i
         dq[i] = dq[i] + delta
         # Transformación homogénea con el incremento
-        dT = fkine_kr20(dq)
+        dT = fkine_kr20(dq[:7])
         # Aproximación del Jacobiano
         J[:,i] = (dT[0:3,3] - T[0:3,3])/delta
     
@@ -75,7 +102,7 @@ def ikine(xdes, q0):
     """
     Calcular la cinematica inversa numéricamente
     xdes: posición deseada del efector final [x, y, z]
-    q0: configuración inicial/semilla [q1, q2, q3, q4, q5, q6, q7, q8, q9]
+    q0: configuración inicial/semilla [q1, q2, q3, q4, q5, q6, q7, q8]
     """
     epsilon = 0.001
     max_iter = 1000
@@ -85,8 +112,8 @@ def ikine(xdes, q0):
     for i in range(max_iter):
         # Calcular Jacobiano actual
         J = jacobian_position(q, delta)
-        # Obtener posición actual
-        T = fkine_kr20(q)
+        # Obtener posición actual (usando los primeros 7 joints)
+        T = fkine_kr20(q[:7])
         x = T[0:3,3]
         # Error
         e = xdes - x
