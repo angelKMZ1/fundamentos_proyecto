@@ -11,38 +11,37 @@ if __name__ == '__main__':
     pub = rospy.Publisher('joint_states', JointState, queue_size=1)
     
     # Marcadores para las posiciones actual y deseada
-    bmarker      = BallMarker(color['RED'])
-    bmarker_des  = BallMarker(color['GREEN'])
+    bmarker = BallMarker(color['RED'])
+    bmarker_des = BallMarker(color['GREEN'])
     
-    # Joint names (ya actualizados según el XACRO)
+    # Joint names
     jnames = ['base__link01',
              'link12__link01',
              'link01__link02', 
              'link02__link03', 
              'link03__link04', 
-             'link04__link05', 
-             'link05__gripper',
-             'gripper__gripper_left',
-             'gripper__gripper_right']
+             'link04__link05',
+             'link05__shovel_base',
+             'shovel_base__pusher']
     
-    # Podemos probar diferentes posiciones deseadas
+    # Posiciones deseadas
     xd_list = [
         np.array([0.84, 0.125, 0.249]),  # Posición original
         np.array([0.5, 0.5, 0.5]),       # Punto en el espacio de trabajo
         np.array([0.7, 0.0, 0.6])        # Otro punto
     ]
     
-    # Configuración inicial más cercana al home del robot
-    q0 = np.array([0.0, 0.0, -0.42, -0.32, 0.0, -1.65, 0.0, 0.0, 0.0])
+    # Configuración inicial
+    q0 = np.array([0.0, 0.0, -0.42, -0.32, 0.0, -1.65, 0.0, 0.0])
     
     # Elegir una posición deseada
-    xd = xd_list[0]  # Usar la primera posición
+    xd = xd_list[0]
     
     # Calcular la cinemática inversa
     q = ikine(xd, q0)
     
     # Verificar el resultado
-    T = fkine_kr20(q)
+    T = fkine_kr20(q[:7])  # Usar los primeros 7 joints para FK
     print('Posición deseada:', xd)
     print('Posición alcanzada:', T[0:3,3])
     print('Error:', np.linalg.norm(xd - T[0:3,3]))
@@ -57,6 +56,8 @@ if __name__ == '__main__':
     jstate.header.stamp = rospy.Time.now()
     jstate.name = jnames
     jstate.position = q
+    jstate.velocity = [0.0] * len(jnames)
+    jstate.effort = [0.0] * len(jnames)
     
     # Loop rate (in Hz)
     rate = rospy.Rate(100)
