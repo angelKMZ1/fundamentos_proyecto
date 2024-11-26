@@ -79,7 +79,7 @@ def move_to_target(q_current, xd, Rd, joint_pub, joint_msg, dt=0.05, k_pos=0.3, 
         joint_msg.header.stamp = rospy.Time.now()
         
         # Forward kinematics
-        T = fkine_kr20(q_current[:7])
+        T = fkine_kr20(q_current)
         x = T[0:3,3]
         R = T[0:3,0:3]
         
@@ -95,7 +95,7 @@ def move_to_target(q_current, xd, Rd, joint_pub, joint_msg, dt=0.05, k_pos=0.3, 
         error_ori = np.linalg.norm(e_ori)
         
         if error_pos < 0.01 and error_ori < 0.01:
-            print("Position reached!")
+            print("Position and orientation reached!")
             break
         
         # Calcular Jacobianos
@@ -184,13 +184,13 @@ if __name__ == '__main__':
                   'shovel_base__pusher']
     
     # Orientación deseada (mantener pala horizontal)
-    angle = np.pi/2
+    angle = 90*np.pi/180
     Rd = np.array([[1, 0, 0],
                    [0, np.cos(angle), -np.sin(angle)],
                    [0, np.sin(angle), np.cos(angle)]])
     
     # Configuración inicial
-    q = np.array([0.0, 0.0, -0.42, -0.32, 0.0, -1.65, 0.0, 0.0])
+    q = np.array([0.0, 0.0, 0, -0.32, 0.0, 0, 0.0, 0.0])
     
     # Joint message
     joint_msg = JointState()
@@ -198,10 +198,10 @@ if __name__ == '__main__':
     
     # Secuencia de puntos
     points = [
-        np.array([0.6, 0.6, 0.5]),  # Posición inicial
-        np.array([0.6, 0.3, 0.5]),  # Mover a la izquierda
-        np.array([0.6, 0.3, 2.0]),  # Subir
-        np.array([0.6, 0.6, 2.0])   # Mover a la derecha
+        np.array([0.8, 0.7, 0.5]),  # Posición inicial
+        np.array([0.8, 0.3, 0.5]),  # Mover a la izquierda
+        np.array([0.8, 0.3, 1.5]),  # Subir
+        np.array([0.8, 0.9, 1.5])    # Mover a la derecha
     ]
     
     print("\nStarting movement sequence...")
