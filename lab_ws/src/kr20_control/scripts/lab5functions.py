@@ -1,6 +1,5 @@
 import numpy as np
 from copy import copy
-from pyquaternion import Quaternion
 import scipy.linalg as scl
 
 pi = np.pi
@@ -53,8 +52,8 @@ def fkine_kr20(q):
 """
 def fkine_kr20(q):
     """
-    Calcular la cinematica directa del robot KUKA KR20 dados sus valores articulares. 
-    q es un vector numpy de las primeras 6 articulaciones
+    Calcular la cinemática directa del robot KUKA KR20 dados sus valores articulares.
+    q es un vector numpy de las 8 articulaciones
     """
     # Longitudes (en metros)
     L0 = 0.0
@@ -65,16 +64,16 @@ def fkine_kr20(q):
     L5 = 0
     L6 = 0.153
 
-    # Matrices DH
+    # DH Matrices
     T0 = dh(L0, q[0],     0, 0)
     T1 = dh(L1, q[1],     0.160, pi/2)
     T2 = dh(0 , -q[2]+pi/2,      L2,0)
     T3 = dh(0 , q[3]+pi     ,-L3  ,-pi/2)
     T4 = dh(L4  , q[4]     ,0    ,pi/2)
     T5 = dh(0  , q[5]+pi     ,0    ,-pi/2)
-    T6 = dh(-L6  , 0   ,0   ,0)  # La pala en posición neutral
-    
-    # Efector final con respecto a la base
+    T6 = dh(-L6  , 0  ,0   ,0)  # Prismatic joint
+
+    # End-effector with respect to the base
     T = T0 @ T1 @ T2 @ T3 @ T4 @ T5 @ T6
     return T
 
@@ -153,17 +152,19 @@ def jacobian_pose(q, delta=0.0001):
         
     return J
 
+"""
+
 def TF2xyzquat(T):
-    """
-    Convertir matriz de transformación homogénea a vector [x y z qw qx qy qz]
-    """
+    
+    #Convertir matriz de transformación homogénea a vector [x y z qw qx qy qz]
+    
     quat = Quaternion(matrix=T[0:3,0:3])
     return np.array([T[0,3], T[1,3], T[2,3], quat.w, quat.x, quat.y, quat.z])
 
 def PoseError(x, xd):
-    """
-    Calcular el error de pose entre la pose actual y la deseada
-    """
+    
+    #Calcular el error de pose entre la pose actual y la deseada
+    
     # Error de posición
     pos_err = x[0:3] - xd[0:3]
     
@@ -175,8 +176,7 @@ def PoseError(x, xd):
     
     # Combinar errores
     return np.hstack((pos_err, qua_err))
-
-
+"""
 
 def rot2quat(R):
     """
