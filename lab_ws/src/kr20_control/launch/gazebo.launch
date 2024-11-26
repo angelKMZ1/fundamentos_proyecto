@@ -2,9 +2,9 @@
 <launch>
 
   <!-- Launch spawn and gazebo world -->
-  <include file="$(find kuka_kr20_description)/launch/spawn.launch"/>
+  <include file="$(find kr20_control)/launch/spawn.launch"/>
 
   <!-- Launch control, rqt_publisher, robot state publisher, joint state publisher and rviz -->
-  <include file="$(find kuka_kr20_description)/launch/controllers.launch"/>
+  <include file="$(find kr20_control)/launch/controllers.launch"/>
 
 </launch>
