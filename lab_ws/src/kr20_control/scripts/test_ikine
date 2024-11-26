@@ -28,14 +28,15 @@ if __name__ == '__main__':
     xd_list = [
         np.array([0.84, 0.125, 0.249]),  # Posición original
         np.array([0.5, 0.5, 0.5]),       # Punto en el espacio de trabajo
-        np.array([0.7, 0.0, 0.6])        # Otro punto
+        np.array([0.7, 0.0, 0.6]),        # Otro punto
+        np.array([0.8, 0.7, 0.5])
     ]
     
     # Configuración inicial
-    q0 = np.array([0.0, 0.0, -0.42, -0.32, 0.0, -1.65, 0.0, 0.0])
+    q0 = np.array([0.0, 0.0, 0, 0, 0.0, 0, 0.0, 0.0])
     
     # Elegir una posición deseada
-    xd = xd_list[0]
+    xd = xd_list[3]
     
     # Calcular la cinemática inversa
     q = ikine(xd, q0)
