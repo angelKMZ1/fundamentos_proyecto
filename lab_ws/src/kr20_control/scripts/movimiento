@@ -10,7 +10,7 @@ def move_to_target(q_current, xd, jstate, pub, bmarker_current, bmarker_desired,
     """
     Función auxiliar para mover el robot a un punto objetivo
     """
-    x_current = fkine_kr20(q_current[:7])[0:3,3]
+    x_current = fkine_kr20(q_current)[0:3,3]
     error = np.linalg.norm(xd - x_current)
     
     while error > 0.01 and not rospy.is_shutdown():
@@ -18,7 +18,7 @@ def move_to_target(q_current, xd, jstate, pub, bmarker_current, bmarker_desired,
         jstate.header.stamp = rospy.Time.now()
         
         # Get current position
-        T = fkine_kr20(q_current[:7])
+        T = fkine_kr20(q_current)
         x_current = T[0:3,3]
         
         # Control law
@@ -26,7 +26,7 @@ def move_to_target(q_current, xd, jstate, pub, bmarker_current, bmarker_desired,
         q_current = q_current - 0.8*dt*np.linalg.pinv(J) @ (x_current-xd)  # Aumenté la ganancia a 0.8
         
         # Forward kinematics
-        T = fkine_kr20(q_current[:7])
+        T = fkine_kr20(q_current)
         x_current = T[0:3,3]
         
         # Update error
@@ -52,6 +52,7 @@ def push_movement(q_current, jstate, pub, rate):
     Función para realizar el movimiento del empujador
     """
     print("\nEmpujando...")
+    
     # Avanzar el empujador
     for i in range(100):  # Más iteraciones para movimiento más suave
         q_current[7] = i * 0.25/100  # 0.25 es el límite máximo
@@ -59,9 +60,10 @@ def push_movement(q_current, jstate, pub, rate):
         pub.publish(jstate)
         rate.sleep()
     
-    time.sleep(1)  # Pausa en posición extendida
+    time.sleep(10)  # Pausa en posición extendida
     
     print("\nRetrayendo...")
+    
     # Retraer el empujador
     for i in range(100):
         q_current[7] = 0.25 * (1 - i/100)
@@ -93,12 +95,13 @@ if __name__ == '__main__':
              'link05__shovel_base',
              'shovel_base__pusher']
     
-    # Solo dos puntos principales:
-    # Punto de recogida (bandeja de panes)
-    x_pickup = np.array([0.8, 0.3, 0.5])
-    
-    # Punto de entrega (donde se empujan los panes)
-    x_delivery = np.array([0.8, -0.3, 0.7])  # Cambiado el lado y un poco más alto
+    # Nueva lista de puntos objetivo
+    points = [
+        np.array([0.8, 0.7, 0.5]),  # Posición inicial
+        np.array([0.8, 0.3, 0.5]),  # Mover a la izquierda
+        np.array([0.8, 0.3, 1.5]),  # Subir
+        np.array([0.8, 0.9, 1.5])    # Mover a la derecha
+    ]
     
     # Configuración inicial
     q0 = np.array([0.0, 0.0, 0, -0.32, 0.0, 0, 0.0, 0.0])
@@ -120,24 +123,13 @@ if __name__ == '__main__':
     
     print("Iniciando secuencia de movimientos...")
     
-    # 1. Ir a posición de recogida
-    print("\n1. Moviendo a posición de recogida de panes...")
-    q = move_to_target(q, x_pickup, jstate, pub, bmarker_current, bmarker_desired, rate)
-    print("En posición de recogida")
-    time.sleep(2)
+    for point in points:
+        # Mover a cada punto objetivo
+        print(f"\nMoviendo a: {point}")
+        q = move_to_target(q, point, jstate, pub, bmarker_current, bmarker_desired, rate)
+        time.sleep(2)
     
-    # 2. Ir a posición de entrega
-    print("\n2. Moviendo a posición de entrega...")
-    q = move_to_target(q, x_delivery, jstate, pub, bmarker_current, bmarker_desired, rate)
-    print("En posición de entrega")
-    time.sleep(1)
-    
-    # 3. Realizar movimiento de empuje
+    # Realizar movimiento de empuje
     q = push_movement(q, jstate, pub, rate)
-    
-    # 4. Volver a posición de recogida
-    print("\n4. Volviendo a posición de recogida...")
-    q = move_to_target(q, x_pickup, jstate, pub, bmarker_current, bmarker_desired, rate)
-    print("¡Secuencia completada!")
     
     print('ending motion ...')
