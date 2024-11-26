@@ -27,7 +27,7 @@ if __name__ == '__main__':
     T1 = fkine_kr20(q1[:6])  # Solo usar los primeros 7 para FK
     
     print("\nProbando brazo extendido:")
-    q2 = np.array([0.0, 0.0, np.pi/2, 0.0, 0.0, 0.0, 0.0, 0.0])
+    q2 = np.array([0.0, 0.0, np.pi/2, np.pi/2, 0.0, 0.0, 0.0, 0.0])
     T2 = fkine_kr20(q2[:6])
     
     print("\nProbando rotación de base:")
@@ -35,8 +35,8 @@ if __name__ == '__main__':
     T3 = fkine_kr20(q3[:6])
     
     # Usar la configuración HOME para la visualización
-    q = q1
-    T = T1
+    q = q3
+    T = T3
     
     # Mostrar marcador
     bmarker.position(T)
